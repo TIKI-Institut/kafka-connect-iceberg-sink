@@ -29,296 +29,296 @@ import java.util.*;
  * @author Ismail Simsek
  */
 public class IcebergChangeEvent {
-  private static final ObjectMapper MAPPER = new ObjectMapper();
-  private static final Logger LOGGER = LoggerFactory.getLogger(IcebergChangeEvent.class);
-  private final String destination;
-  private final JsonNode value;
-  private final JsonNode key;
-  private final JsonSchema jsonSchema;
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    public static final List<String> TS_MS_FIELDS = List.of("__ts_ms", "__source_ts_ms");
+    private static final Logger LOGGER = LoggerFactory.getLogger(IcebergChangeEvent.class);
+    private final String destination;
+    private final JsonNode value;
+    private final JsonNode key;
+    private final JsonSchema jsonSchema;
 
-  public IcebergChangeEvent(String destination,
-                            JsonNode value,
-                            JsonNode key,
-                            JsonNode valueSchema,
-                            JsonNode keySchema) {
-    this.destination = destination;
-    this.value = value;
-    this.key = key;
-    this.jsonSchema = new JsonSchema(valueSchema, keySchema);
-  }
-
-  public JsonNode key() {
-    return key;
-  }
-
-  public JsonNode value() {
-    return value;
-  }
-
-  public JsonSchema jsonSchema() {
-    return jsonSchema;
-  }
-
-  public Schema icebergSchema() {
-    return jsonSchema.icebergSchema();
-  }
-
-  public String destinationTable() {
-    return destination.replace(".", "_").replace("-", "_");
-  }
-
-  public GenericRecord asIcebergRecord(Schema schema) {
-    final GenericRecord record = asIcebergRecord(schema.asStruct(), value);
-
-    if (value != null && value.has("__source_ts_ms") && value.get("__source_ts_ms") != null) {
-      final long source_ts_ms = value.get("__source_ts_ms").longValue();
-      final OffsetDateTime odt = OffsetDateTime.ofInstant(Instant.ofEpochMilli(source_ts_ms), ZoneOffset.UTC);
-      record.setField("__source_ts", odt);
-    } else {
-      record.setField("__source_ts", null);
-    }
-    return record;
-  }
-
-  private GenericRecord asIcebergRecord(Types.StructType tableFields, JsonNode data) {
-    LOGGER.debug("Processing nested field:{}", tableFields);
-    GenericRecord record = GenericRecord.create(tableFields);
-
-    for (Types.NestedField field : tableFields.fields()) {
-      // Set value to null if json event don't have the field
-      if (data == null || !data.has(field.name()) || data.get(field.name()) == null) {
-        record.setField(field.name(), null);
-        continue;
-      }
-      // get the value of the field from json event, map it to iceberg value
-      record.setField(field.name(), jsonValToIcebergVal(field, data.get(field.name())));
+    public IcebergChangeEvent(String destination,
+                              JsonNode value,
+                              JsonNode key,
+                              JsonNode valueSchema,
+                              JsonNode keySchema) {
+        this.destination = destination;
+        this.value = value;
+        this.key = key;
+        this.jsonSchema = new JsonSchema(valueSchema, keySchema);
     }
 
-    return record;
-  }
-
-  private Type.PrimitiveType icebergFieldType(String fieldType) {
-    switch (fieldType) {
-      case "int8":
-      case "int16":
-      case "int32": // int 4 bytes
-        return Types.IntegerType.get();
-      case "int64": // long 8 bytes
-        return Types.LongType.get();
-      case "float8":
-      case "float16":
-      case "float32": // float is represented in 32 bits,
-        return Types.FloatType.get();
-      case "float64": // double is represented in 64 bits
-        return Types.DoubleType.get();
-      case "boolean":
-        return Types.BooleanType.get();
-      case "string":
-        return Types.StringType.get();
-      case "bytes":
-        return Types.BinaryType.get();
-      default:
-        // default to String type
-        return Types.StringType.get();
-      //throw new RuntimeException("'" + fieldName + "' has "+fieldType+" type, "+fieldType+" not supported!");
-    }
-  }
-
-  private Object jsonValToIcebergVal(Types.NestedField field,
-                                     JsonNode node) {
-    LOGGER.debug("Processing Field:{} Type:{}", field.name(), field.type());
-    final Object val;
-    switch (field.type().typeId()) {
-      case INTEGER: // int 4 bytes
-        val = node.isNull() ? null : node.asInt();
-        break;
-      case LONG: // long 8 bytes
-        val = node.isNull() ? null : node.asLong();
-        break;
-      case FLOAT: // float is represented in 32 bits,
-        val = node.isNull() ? null : node.floatValue();
-        break;
-      case DOUBLE: // double is represented in 64 bits
-        val = node.isNull() ? null : node.asDouble();
-        break;
-      case BOOLEAN:
-        val = node.isNull() ? null : node.asBoolean();
-        break;
-      case STRING:
-        // if the node is not a value node (method isValueNode returns false), convert it to string.
-        val = node.isValueNode() ? node.asText(null) : node.toString();
-        break;
-      case BINARY:
-        try {
-          val = node.isNull() ? null : ByteBuffer.wrap(node.binaryValue());
-        } catch (IOException e) {
-          LOGGER.error("Failed to convert binary value to iceberg value, field:" + field.name(), e);
-          throw new RuntimeException("Failed Processing Event!", e);
-        }
-        break;
-      case LIST:
-        val = MAPPER.convertValue(node, ArrayList.class);
-        break;
-      case MAP:
-        val = MAPPER.convertValue(node, Map.class);
-        break;
-      case STRUCT:
-        // create it as struct, nested type
-        // recursive call to get nested data/record
-        val = asIcebergRecord(field.type().asStructType(), node);
-        break;
-      default:
-        // default to String type
-        // if the node is not a value node (method isValueNode returns false), convert it to string.
-        val = node.isValueNode() ? node.asText(null) : node.toString();
-        break;
+    public JsonNode key() {
+        return key;
     }
 
-    return val;
-  }
-
-  public class JsonSchema {
-    private final JsonNode valueSchema;
-    private final JsonNode keySchema;
-
-    JsonSchema(JsonNode valueSchema, JsonNode keySchema) {
-      this.valueSchema = valueSchema;
-      this.keySchema = keySchema;
+    public JsonNode value() {
+        return value;
     }
 
-    public JsonNode valueSchema() {
-      return valueSchema;
-    }
-
-    public JsonNode keySchema() {
-      return keySchema;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
-      JsonSchema that = (JsonSchema) o;
-      return Objects.equals(valueSchema, that.valueSchema) && Objects.equals(keySchema, that.keySchema);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(valueSchema, keySchema);
-    }
-
-    //getIcebergFieldsFromEventSchema
-    private List<Types.NestedField> KeySchemaFields() {
-      if (keySchema != null && keySchema.has("fields") && keySchema.get("fields").isArray()) {
-        LOGGER.debug(keySchema.toString());
-        return icebergSchema(keySchema, "", 0);
-      }
-      LOGGER.trace("Key schema not found!");
-      return new ArrayList<>();
-    }
-
-    private List<Types.NestedField> valueSchemaFields() {
-      if (valueSchema != null && valueSchema.has("fields") && valueSchema.get("fields").isArray()) {
-        LOGGER.debug(valueSchema.toString());
-        return icebergSchema(valueSchema, "", 0, true);
-      }
-      LOGGER.trace("Event schema not found!");
-      return new ArrayList<>();
+    public JsonSchema jsonSchema() {
+        return jsonSchema;
     }
 
     public Schema icebergSchema() {
-
-      if (this.valueSchema == null) {
-        throw new RuntimeException("Failed to get event schema, event schema is null");
-      }
-
-      final List<Types.NestedField> tableColumns = valueSchemaFields();
-
-      if (tableColumns.isEmpty()) {
-        throw new RuntimeException("Failed to get event schema, event schema has no fields!");
-      }
-
-      final List<Types.NestedField> keyColumns = KeySchemaFields();
-      Set<Integer> identifierFieldIds = new HashSet<>();
-
-      for (Types.NestedField ic : keyColumns) {
-        boolean found = false;
-
-        ListIterator<Types.NestedField> colsIterator = tableColumns.listIterator();
-        while (colsIterator.hasNext()) {
-          Types.NestedField tc = colsIterator.next();
-          if (Objects.equals(tc.name(), ic.name())) {
-            identifierFieldIds.add(tc.fieldId());
-            // set column as required its part of identifier filed
-            colsIterator.set(tc.asRequired());
-            found = true;
-            break;
-          }
-        }
-
-        if (!found) {
-          throw new ValidationException("Table Row identifier field `" + ic.name() + "` not found in table columns");
-        }
-
-      }
-
-      return new Schema(tableColumns, identifierFieldIds);
+        return jsonSchema.icebergSchema();
     }
 
-    private List<Types.NestedField> icebergSchema(JsonNode eventSchema, String schemaName, int columnId) {
-      return icebergSchema(eventSchema, schemaName, columnId, false);
+    public String destinationTable() {
+        return destination.replace(".", "_").replace("-", "_");
     }
 
-    private List<Types.NestedField> icebergSchema(JsonNode eventSchema, String schemaName, int columnId,
-                                                  boolean addSourceTsField) {
-      List<Types.NestedField> schemaColumns = new ArrayList<>();
-      String schemaType = eventSchema.get("type").textValue();
-      LOGGER.debug("Converting Schema of: {}::{}", schemaName, schemaType);
-      for (JsonNode jsonSchemaFieldNode : eventSchema.get("fields")) {
-        columnId++;
-        String fieldName = jsonSchemaFieldNode.get("field").textValue();
-        String fieldType = jsonSchemaFieldNode.get("type").textValue();
-        LOGGER.debug("Processing Field: [{}] {}.{}::{}", columnId, schemaName, fieldName, fieldType);
-        switch (fieldType) {
-          case "array":
-            JsonNode items = jsonSchemaFieldNode.get("items");
-            if (items != null && items.has("type")) {
-              String listItemType = items.get("type").textValue();
+    public GenericRecord asIcebergRecord(Schema schema) {
+        return asIcebergRecord(schema.asStruct(), value);
+    }
 
-              if (listItemType.equals("struct") || listItemType.equals("array") || listItemType.equals("map")) {
-                throw new RuntimeException("Complex nested array types are not supported," +
-                                           " array[" + listItemType + "], field " + fieldName);
-              }
+    private static GenericRecord asIcebergRecord(Types.StructType tableFields, JsonNode data) {
+        LOGGER.debug("Processing nested field:{}", tableFields);
+        GenericRecord record = GenericRecord.create(tableFields);
 
-              Type.PrimitiveType item = icebergFieldType(listItemType);
-              schemaColumns.add(Types.NestedField.optional(
-                  columnId, fieldName, Types.ListType.ofOptional(++columnId, item)));
-            } else {
-              throw new RuntimeException("Unexpected Array type for field " + fieldName);
+        for (Types.NestedField field : tableFields.fields()) {
+            // Set value to null if json event don't have the field
+            if (data == null || !data.has(field.name()) || data.get(field.name()) == null) {
+                record.setField(field.name(), null);
+                continue;
             }
-            break;
-          case "map":
-            throw new RuntimeException("'" + fieldName + "' has Map type, Map type not supported!");
-            //break;
-          case "struct":
-            // create it as struct, nested type
-            List<Types.NestedField> subSchema = icebergSchema(jsonSchemaFieldNode, fieldName, columnId);
-            schemaColumns.add(Types.NestedField.optional(columnId, fieldName, Types.StructType.of(subSchema)));
-            columnId += subSchema.size();
-            break;
-          default: //primitive types
-            schemaColumns.add(Types.NestedField.optional(columnId, fieldName, icebergFieldType(fieldType)));
-            break;
+            // get the value of the field from json event, map it to iceberg value
+            record.setField(field.name(), jsonValToIcebergVal(field, data.get(field.name())));
         }
-      }
 
-      if (addSourceTsField) {
-        columnId++;
-        schemaColumns.add(Types.NestedField.optional(columnId, "__source_ts", Types.TimestampType.withZone()));
-      }
-      return schemaColumns;
+        return record;
     }
 
-  }
+    private static Type.PrimitiveType icebergFieldType(String fieldName, String fieldType) {
+        switch (fieldType) {
+            case "int8":
+            case "int16":
+            case "int32": // int 4 bytes
+                return Types.IntegerType.get();
+            case "int64": // long 8 bytes
+                if (TS_MS_FIELDS.contains(fieldName)) {
+                    return Types.TimestampType.withZone();
+                } else {
+                    return Types.LongType.get();
+                }
+            case "float8":
+            case "float16":
+            case "float32": // float is represented in 32 bits,
+                return Types.FloatType.get();
+            case "float64": // double is represented in 64 bits
+                return Types.DoubleType.get();
+            case "boolean":
+                return Types.BooleanType.get();
+            case "string":
+                return Types.StringType.get();
+            case "uuid":
+                return Types.UUIDType.get();
+            case "bytes":
+                return Types.BinaryType.get();
+            default:
+                // default to String type
+                return Types.StringType.get();
+            //throw new RuntimeException("'" + fieldName + "' has "+fieldType+" type, "+fieldType+" not supported!");
+        }
+    }
+
+    private static Object jsonValToIcebergVal(Types.NestedField field, JsonNode node) {
+        LOGGER.debug("Processing Field:{} Type:{}", field.name(), field.type());
+        final Object val;
+        switch (field.type().typeId()) {
+            case INTEGER: // int 4 bytes
+                val = node.isNull() ? null : node.asInt();
+                break;
+            case LONG: // long 8 bytes
+                val = node.isNull() ? null : node.asLong();
+                break;
+            case FLOAT: // float is represented in 32 bits,
+                val = node.isNull() ? null : node.floatValue();
+                break;
+            case DOUBLE: // double is represented in 64 bits
+                val = node.isNull() ? null : node.asDouble();
+                break;
+            case BOOLEAN:
+                val = node.isNull() ? null : node.asBoolean();
+                break;
+            case STRING:
+                // if the node is not a value node (method isValueNode returns false), convert it to string.
+                val = node.isValueNode() ? node.asText(null) : node.toString();
+                break;
+            case UUID:
+                val = node.isValueNode() ? UUID.fromString(node.asText(null)) : UUID.fromString(node.toString());
+                break;
+            case TIMESTAMP:
+                if (node.isLong() && TS_MS_FIELDS.contains(field.name())) {
+                    val = OffsetDateTime.ofInstant(Instant.ofEpochMilli(node.longValue()), ZoneOffset.UTC);
+                } else if (node.isTextual()) {
+                    val = OffsetDateTime.parse(node.asText());
+                } else {
+                    throw new RuntimeException("Failed to convert timestamp value, field: " + field.name() + " value: " + node);
+                }
+                break;
+            case BINARY:
+                try {
+                    val = node.isNull() ? null : ByteBuffer.wrap(node.binaryValue());
+                } catch (IOException e) {
+                    LOGGER.error("Failed to convert binary value to iceberg value, field:" + field.name(), e);
+                    throw new RuntimeException("Failed Processing Event!", e);
+                }
+                break;
+            case LIST:
+                val = MAPPER.convertValue(node, ArrayList.class);
+                break;
+            case MAP:
+                val = MAPPER.convertValue(node, Map.class);
+                break;
+            case STRUCT:
+                // create it as struct, nested type
+                // recursive call to get nested data/record
+                val = asIcebergRecord(field.type().asStructType(), node);
+                break;
+            default:
+                // default to String type
+                // if the node is not a value node (method isValueNode returns false), convert it to string.
+                val = node.isValueNode() ? node.asText(null) : node.toString();
+                break;
+        }
+
+        return val;
+    }
+
+    public class JsonSchema {
+        private final JsonNode valueSchema;
+        private final JsonNode keySchema;
+
+        JsonSchema(JsonNode valueSchema, JsonNode keySchema) {
+            this.valueSchema = valueSchema;
+            this.keySchema = keySchema;
+        }
+
+        public JsonNode valueSchema() {
+            return valueSchema;
+        }
+
+        public JsonNode keySchema() {
+            return keySchema;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            JsonSchema that = (JsonSchema) o;
+            return Objects.equals(valueSchema, that.valueSchema) && Objects.equals(keySchema, that.keySchema);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(valueSchema, keySchema);
+        }
+
+        //getIcebergFieldsFromEventSchema
+        private List<Types.NestedField> KeySchemaFields() {
+            if (keySchema != null && keySchema.has("fields") && keySchema.get("fields").isArray()) {
+                LOGGER.debug(keySchema.toString());
+                return icebergSchema(keySchema, "", 0);
+            }
+            LOGGER.trace("Key schema not found!");
+            return new ArrayList<>();
+        }
+
+        private List<Types.NestedField> valueSchemaFields() {
+            if (valueSchema != null && valueSchema.has("fields") && valueSchema.get("fields").isArray()) {
+                LOGGER.debug(valueSchema.toString());
+                return icebergSchema(valueSchema, "", 0);
+            }
+            LOGGER.trace("Event schema not found!");
+            return new ArrayList<>();
+        }
+
+        public Schema icebergSchema() {
+
+            if (this.valueSchema == null) {
+                throw new RuntimeException("Failed to get event schema, event schema is null");
+            }
+
+            final List<Types.NestedField> tableColumns = valueSchemaFields();
+
+            if (tableColumns.isEmpty()) {
+                throw new RuntimeException("Failed to get event schema, event schema has no fields!");
+            }
+
+            final List<Types.NestedField> keyColumns = KeySchemaFields();
+            Set<Integer> identifierFieldIds = new HashSet<>();
+
+            for (Types.NestedField ic : keyColumns) {
+                boolean found = false;
+
+                ListIterator<Types.NestedField> colsIterator = tableColumns.listIterator();
+                while (colsIterator.hasNext()) {
+                    Types.NestedField tc = colsIterator.next();
+                    if (Objects.equals(tc.name(), ic.name())) {
+                        identifierFieldIds.add(tc.fieldId());
+                        // set column as required its part of identifier filed
+                        colsIterator.set(tc.asRequired());
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    throw new ValidationException("Table Row identifier field `" + ic.name() + "` not found in table columns");
+                }
+
+            }
+
+            return new Schema(tableColumns, identifierFieldIds);
+        }
+
+        private List<Types.NestedField> icebergSchema(JsonNode eventSchema, String schemaName, int columnId) {
+            List<Types.NestedField> schemaColumns = new ArrayList<>();
+            String schemaType = eventSchema.get("type").textValue();
+            LOGGER.debug("Converting Schema of: {}::{}", schemaName, schemaType);
+            for (JsonNode jsonSchemaFieldNode : eventSchema.get("fields")) {
+                columnId++;
+                String fieldName = jsonSchemaFieldNode.get("field").textValue();
+                String fieldType = jsonSchemaFieldNode.get("type").textValue();
+                LOGGER.debug("Processing Field: [{}] {}.{}::{}", columnId, schemaName, fieldName, fieldType);
+                switch (fieldType) {
+                    case "array":
+                        JsonNode items = jsonSchemaFieldNode.get("items");
+                        if (items != null && items.has("type")) {
+                            String listItemType = items.get("type").textValue();
+
+                            if (listItemType.equals("struct") || listItemType.equals("array") || listItemType.equals("map")) {
+                                throw new RuntimeException("Complex nested array types are not supported," +
+                                        " array[" + listItemType + "], field " + fieldName);
+                            }
+
+                            Type.PrimitiveType item = icebergFieldType(fieldName, listItemType);
+                            schemaColumns.add(Types.NestedField.optional(
+                                    columnId, fieldName, Types.ListType.ofOptional(++columnId, item)));
+                        } else {
+                            throw new RuntimeException("Unexpected Array type for field " + fieldName);
+                        }
+                        break;
+                    case "map":
+                        throw new RuntimeException("'" + fieldName + "' has Map type, Map type not supported!");
+                        //break;
+                    case "struct":
+                        // create it as struct, nested type
+                        List<Types.NestedField> subSchema = icebergSchema(jsonSchemaFieldNode, fieldName, columnId);
+                        schemaColumns.add(Types.NestedField.optional(columnId, fieldName, Types.StructType.of(subSchema)));
+                        columnId += subSchema.size();
+                        break;
+                    default: //primitive types
+                        schemaColumns.add(Types.NestedField.optional(columnId, fieldName, icebergFieldType(fieldName, fieldType)));
+                        break;
+                }
+            }
+
+            return schemaColumns;
+        }
+
+    }
 
 }

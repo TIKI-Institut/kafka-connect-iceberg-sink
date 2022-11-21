@@ -21,6 +21,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static com.getindata.kafka.connect.iceberg.sink.testresources.TestConfig.TABLE_NAMESPACE;
 import static com.getindata.kafka.connect.iceberg.sink.testresources.TestConfig.TABLE_PREFIX;
@@ -46,7 +47,7 @@ class IcebergTableOperatorTest {
 
     public Table createTable(IcebergChangeEvent sampleEvent) {
         final TableIdentifier tableId = TableIdentifier.of(Namespace.of(TABLE_NAMESPACE), TABLE_PREFIX + sampleEvent.destinationTable());
-        return IcebergUtil.createIcebergTable(icebergCatalog, tableId, sampleEvent.icebergSchema(), false);
+        return IcebergUtil.createIcebergTable(icebergCatalog, tableId, sampleEvent.icebergSchema(), Optional.empty());
     }
 
     @Test

@@ -5,6 +5,7 @@ import org.apache.kafka.common.config.ConfigDef;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.apache.kafka.common.config.ConfigDef.Importance.LOW;
 import static org.apache.kafka.common.config.ConfigDef.Importance.MEDIUM;
@@ -20,6 +21,7 @@ public class IcebergSinkConfiguration {
     public static final String TABLE_NAMESPACE = "table.namespace";
     public static final String TABLE_PREFIX = "table.prefix";
     public static final String TABLE_AUTO_CREATE = "table.auto-create";
+    public static final String TABLE_PARTITION_FIELD = "table.partition-field";
     public static final String ICEBERG_PREFIX = "iceberg.";
     public static final String CATALOG_NAME = ICEBERG_PREFIX + "name";
     public static final String CATALOG_IMPL = ICEBERG_PREFIX + "catalog-impl";
@@ -44,6 +46,8 @@ public class IcebergSinkConfiguration {
                     "Table namespace. In Glue it will be used as database name")
             .define(TABLE_PREFIX, STRING, "", MEDIUM,
                     "Prefix added to all table names")
+            .define(TABLE_PARTITION_FIELD, STRING, null, LOW,
+                    "Table field used for partitioning")
             .define(CATALOG_NAME, STRING, "default", MEDIUM,
                     "Iceberg catalog name")
             .define(CATALOG_IMPL, STRING, null, MEDIUM,
@@ -92,6 +96,10 @@ public class IcebergSinkConfiguration {
 
     public String getTablePrefix() {
         return parsedConfig.getString(TABLE_PREFIX);
+    }
+
+    public Optional<String> getTablePartitionField() {
+        return Optional.ofNullable(parsedConfig.getString(TABLE_PARTITION_FIELD));
     }
 
     public String getCatalogName() {

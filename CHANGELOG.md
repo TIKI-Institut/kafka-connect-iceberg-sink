@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 -   removed 'table.write-format', can be replaced with 'iceberg.table-default.write.format.default'
+-   Reworked partition field implementation. Added config key 'table.partition-field'. Removed dependency on 'upsert' feature
 
 ## [0.2.0] - 2022-11-16
 

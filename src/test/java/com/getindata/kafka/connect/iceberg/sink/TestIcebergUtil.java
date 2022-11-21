@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -132,7 +133,7 @@ class TestIcebergUtil {
     }
 
     @Test
-    public void createIcebergTablesWithCustomProperties(@TempDir Path localWarehouseDir) {
+    public void createIcebergTableWithCustomProperties(@TempDir Path localWarehouseDir) {
         IcebergSinkConfiguration config = TestConfig.builder()
                 .withLocalCatalog(localWarehouseDir)
                 .withUpsert(false)
@@ -148,8 +149,53 @@ class TestIcebergUtil {
                 Set.of(1)
         );
 
-        Table table1 = IcebergUtil.createIcebergTable(catalog, TableIdentifier.of("test", "test"), schema, false);
+        Table table1 = IcebergUtil.createIcebergTable(catalog, TableIdentifier.of("test", "test"), schema, Optional.empty());
 
         assertTrue(IcebergUtil.getTableFileFormat(table1) == FileFormat.ORC);
+    }
+
+    @Test
+    public void createIcebergTableWithDayPartitioning(@TempDir Path localWarehouseDir) {
+        IcebergSinkConfiguration config = TestConfig.builder()
+                .withLocalCatalog(localWarehouseDir)
+                .withUpsert(false)
+                .build();
+
+        Catalog catalog = IcebergCatalogFactory.create(config);
+
+        Schema schema = new Schema(
+                List.of(
+                        Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                        Types.NestedField.required(2, "data", Types.StringType.get()),
+                        Types.NestedField.required(3, "__ts_ms", Types.TimestampType.withoutZone())),
+                Set.of(1)
+        );
+
+        Table table1 = IcebergUtil.createIcebergTable(catalog, TableIdentifier.of("test", "test"), schema, Optional.of("__ts_ms"));
+
+        assertTrue(table1.spec().isPartitioned());
+    }
+
+    @Test
+    public void createIcebergTableWithIdentityPartitioning(@TempDir Path localWarehouseDir) {
+        IcebergSinkConfiguration config = TestConfig.builder()
+                .withLocalCatalog(localWarehouseDir)
+                .withUpsert(false)
+                .build();
+
+        Catalog catalog = IcebergCatalogFactory.create(config);
+
+        Schema schema = new Schema(
+                List.of(
+                        Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                        Types.NestedField.required(2, "data", Types.StringType.get()),
+                        Types.NestedField.required(3, "dimension", Types.StringType.get())),
+                Set.of(1)
+        );
+
+        Table table1 = IcebergUtil.createIcebergTable(catalog, TableIdentifier.of("test", "test"), schema, Optional.of("dimension"));
+
+        assertTrue(table1.spec().isPartitioned());
+        assertTrue(table1.spec().fields().get(0).transform().isIdentity());
     }
 }
