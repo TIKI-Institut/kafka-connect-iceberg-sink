@@ -15,8 +15,9 @@ import static org.apache.kafka.common.config.ConfigDef.Type.STRING;
 public class IcebergSinkConfiguration {
     public static final String UPSERT = "upsert";
     public static final String UPSERT_KEEP_DELETES = "upsert.keep-deletes";
-    public static final String UPSERT_DEDUP_COLUMN = "upsert.dedup-column";
-    public static final String UPSERT_OP_COLUMN = "upsert.op-column";
+    public static final String DEDUP = "dedup";
+    public static final String DEDUP_COLUMN = "dedup.column";
+    public static final String CDC_OP_COLUMN = "cdc-op-column";
     public static final String ALLOW_FIELD_ADDITION = "allow-field-addition";
     public static final String TABLE_NAMESPACE = "table.namespace";
     public static final String TABLE_PREFIX = "table.prefix";
@@ -27,17 +28,20 @@ public class IcebergSinkConfiguration {
     public static final String CATALOG_IMPL = ICEBERG_PREFIX + "catalog-impl";
     public static final String CATALOG_TYPE = ICEBERG_PREFIX + "type";
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
+            .define(CDC_OP_COLUMN, STRING, "__op", MEDIUM,
+                    "Field containing the debezium CDC operation, like 'c', 'u', 'd'. " +
+                            "Used for detecting delete events and " +
+                            "to check which state is newer during upsert when 'dedup.column' is not enough to resolve")
             .define(UPSERT, BOOLEAN, true, MEDIUM,
                     "When true Iceberg rows will be updated based on table primary key. " +
                             "When false all modification will be added as separate rows.")
-            .define(UPSERT_KEEP_DELETES, BOOLEAN, true, MEDIUM,
+            .define(UPSERT_KEEP_DELETES, BOOLEAN, false, MEDIUM,
                     "When true delete operation will leave a tombstone that will have only " +
                             "a primary key and __deleted* flag set to true")
-            .define(UPSERT_DEDUP_COLUMN, STRING, "__source_ts_ms", LOW,
-                    "Column used to check which state is newer during upsert")
-            .define(UPSERT_OP_COLUMN, STRING, "__op", LOW,
-                    "Column used to check which state is newer during upsert when " +
-                            "upsert.dedup-column is not enough to resolve")
+            .define(DEDUP, BOOLEAN, false, LOW,
+                    "When true CDC events will be deduplicated per batch")
+            .define(DEDUP_COLUMN, STRING, "__source_ts_ms", LOW,
+                    "Column used to check which state is newer during deduplication")
             .define(ALLOW_FIELD_ADDITION, BOOLEAN, true, LOW,
                     "When true sink will be adding new columns to Iceberg tables on schema changes")
             .define(TABLE_AUTO_CREATE, BOOLEAN, false, MEDIUM,
@@ -55,8 +59,7 @@ public class IcebergSinkConfiguration {
                             "can be set to non null value at the same time")
             .define(CATALOG_TYPE, STRING, null, MEDIUM,
                     "Iceberg catalog type (Only one of iceberg.catalog-impl and iceberg.type " +
-                            "can be set to non null value at the same time)")
-            ;
+                            "can be set to non null value at the same time)");
 
     private final AbstractConfig parsedConfig;
     private final Map<String, String> properties;
@@ -74,12 +77,16 @@ public class IcebergSinkConfiguration {
         return parsedConfig.getBoolean(UPSERT_KEEP_DELETES);
     }
 
-    public String getUpsertDedupColumn() {
-        return parsedConfig.getString(UPSERT_DEDUP_COLUMN);
+    public boolean isDedup() {
+        return parsedConfig.getBoolean(DEDUP);
     }
 
-    public String getUpsertOpColumn() {
-        return parsedConfig.getString(UPSERT_OP_COLUMN);
+    public String getDedupColumn() {
+        return parsedConfig.getString(DEDUP_COLUMN);
+    }
+
+    public String getCdcOpColumn() {
+        return parsedConfig.getString(CDC_OP_COLUMN);
     }
 
     public boolean isAllowFieldAddition() {
@@ -105,7 +112,7 @@ public class IcebergSinkConfiguration {
     public String getCatalogName() {
         return parsedConfig.getString(CATALOG_NAME);
     }
-    
+
     public Map<String, String> getIcebergCatalogConfiguration() {
         Map<String, String> config = new HashMap<>();
         properties.keySet().stream().filter(key -> key.startsWith(ICEBERG_PREFIX)).forEach(key -> {

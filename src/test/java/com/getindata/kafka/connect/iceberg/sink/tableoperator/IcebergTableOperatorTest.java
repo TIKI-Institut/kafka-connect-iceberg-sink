@@ -13,6 +13,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,12 @@ class IcebergTableOperatorTest {
         IcebergSinkConfiguration config = TestConfig.builder().withS3(s3MinioContainer.getUrl()).withUpsert(false).build();
         icebergCatalog = IcebergCatalogFactory.create(config);
         icebergTableOperator = IcebergTableOperatorFactory.create(config);
-        sparkTestHelper = new SparkTestHelper(s3MinioContainer.getUrl());
+        sparkTestHelper = SparkTestHelper.builder().withS3(s3MinioContainer.getUrl()).build();
+    }
+
+    @AfterAll
+    static void cleanup() {
+        sparkTestHelper.shutdownSession();
     }
 
     public Table createTable(IcebergChangeEvent sampleEvent) {
@@ -84,8 +90,9 @@ class IcebergTableOperatorTest {
         );
         icebergTableOperator.addToTable(icebergTable, events);
 
-        sparkTestHelper.getTableData(TEST_TABLE).show(false);
-        Assertions.assertEquals(3, sparkTestHelper.getTableData(TEST_TABLE).count());
+        var modifiedTableName = String.format("%s.%s", TABLE_NAMESPACE, TABLE_PREFIX) + TEST_TABLE.replace(".", "_");
+        sparkTestHelper.query("SELECT *, input_file_name() as input_file FROM " + modifiedTableName).show(false);
+        Assertions.assertEquals(3, sparkTestHelper.table(modifiedTableName).count());
         events.clear();
         events.add(new IcebergChangeEventBuilder()
                 .destination(TEST_TABLE)
@@ -97,8 +104,8 @@ class IcebergTableOperatorTest {
                 .build()
         );
         icebergTableOperator.addToTable(icebergTable, events);
-        sparkTestHelper.getTableData(TEST_TABLE).show(false);
-        Assertions.assertEquals(4, sparkTestHelper.getTableData(TEST_TABLE).count());
-        Assertions.assertEquals(1, sparkTestHelper.getTableData(TEST_TABLE).where("user_name == 'Alice-Updated'").count());
+        sparkTestHelper.query("SELECT *, input_file_name() as input_file FROM " + modifiedTableName).show(false);
+        Assertions.assertEquals(4, sparkTestHelper.table(modifiedTableName).count());
+        Assertions.assertEquals(1, sparkTestHelper.table(modifiedTableName).where("user_name == 'Alice-Updated'").count());
     }
 }

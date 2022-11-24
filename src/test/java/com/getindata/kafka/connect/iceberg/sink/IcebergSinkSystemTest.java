@@ -2,7 +2,10 @@ package com.getindata.kafka.connect.iceberg.sink;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.getindata.kafka.connect.iceberg.sink.testcontainers.*;
+import com.getindata.kafka.connect.iceberg.sink.testcontainers.DebeziumConnectContainer;
+import com.getindata.kafka.connect.iceberg.sink.testcontainers.KafkaContainer;
+import com.getindata.kafka.connect.iceberg.sink.testcontainers.PostgresContainer;
+import com.getindata.kafka.connect.iceberg.sink.testcontainers.S3MinioContainer;
 import com.getindata.kafka.connect.iceberg.sink.testresources.MinioTestHelper;
 import com.getindata.kafka.connect.iceberg.sink.testresources.PostgresTestHelper;
 import com.getindata.kafka.connect.iceberg.sink.testresources.SparkTestHelper;
@@ -50,11 +53,6 @@ class IcebergSinkSystemTest {
             .withNetwork(network);
 
     @Container
-    private static final SchemaRegistryContainer schemaRegistryContainer = new SchemaRegistryContainer()
-            .withNetwork(network)
-            .withKafkaBoostrap(kafkaContainer.getInternalBootstrap());
-
-    @Container
     private static final PostgresContainer postgresContainer = new PostgresContainer()
             .withNetwork(network);
 
@@ -71,7 +69,7 @@ class IcebergSinkSystemTest {
 
     @BeforeAll
     static void setup() throws Exception {
-        sparkTestHelper = new SparkTestHelper(s3MinioContainer.getUrl());
+        sparkTestHelper = SparkTestHelper.builder().withS3(s3MinioContainer.getUrl()).build();
         minioTestHelper = new MinioTestHelper(s3MinioContainer.getUrl());
         postgresTestHelper = new PostgresTestHelper(postgresContainer.getJdbcUrl(), postgresContainer.getUser(), postgresContainer.getPassword());
         minioTestHelper.createDefaultBucket();

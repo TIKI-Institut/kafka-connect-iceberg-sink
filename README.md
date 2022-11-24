@@ -12,22 +12,23 @@ mvn clean package
 
 ### Configuration reference
 
-| Key                     | Type    | Default value  | Description                                                                                                                                           |
-|-------------------------|---------|----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| upsert                  | boolean | true           | When *true* Iceberg rows will be updated based on table primary key. When *false* all modification will be added as separate rows.                    |
-| upsert.keep-deletes     | boolean | true           | When *true* delete operation will leave a tombstone that will have only a primary key and *__deleted** flag set to true                               |
-| upsert.dedup-column     | String  | __source_ts_ms | Column used to check which state is newer during upsert                                                                                               | 
-| upsert.op-column        | String  | __op           | Column used to check which state is newer during upsert when *upsert.dedup-column* is not enough to resolve                                           |
-| allow-field-addition    | boolean | true           | When *true* sink will be adding new columns to Iceberg tables on schema changes                                                                       |
-| table.auto-create       | boolean | false          | When *true* sink will automatically create new Iceberg tables                                                                                         |
-| table.namespace         | String  | default        | Table namespace. In Glue it will be used as database name                                                                                             |
-| table.prefix            | String  | *empty string* | Prefix added to all table names                                                                                                                       |
-| table.partition-field   | String  | *null*         | Field name used for partitioning. When a Timestamp or Date field is used, the partitioning is transformed by 'day()', otherwise 'identity()' is used. |
-| iceberg.name            | String  | default        | Iceberg catalog name                                                                                                                                  |
-| iceberg.catalog-impl    | String  | *null*         | Iceberg catalog implementation (Only one of iceberg.catalog-impl and iceberg.type can be set to non null value at the same time                       |
-| iceberg.type            | String  | *null*         | Iceberg catalog type (Only one of iceberg.catalog-impl and iceberg.type can be set to non null value at the same time)                                |
-| iceberg.*               |         |                | All properties with this prefix will be passed to Iceberg Catalog implementation                                                                      |
-| iceberg.table-default.* |         |                | Iceberg specific table settings can be changed with this prefix, e.g. 'iceberg.table-default.write.format.default' can be set to 'orc'                |
+| Key                     | Type    | Default value  | Description                                                                                                                                                                                    |
+|-------------------------|---------|----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| cdc-op-column           | String  | __op           | Field containing the debezium CDC operation, like 'c', 'u', 'd'. Used for detecting delete events and to check which state is newer during upsert when *dedup.column* is not enough to resolve |
+| upsert                  | boolean | true           | When *true* Iceberg rows will be updated based on table primary key. When *false* all modification will be added as separate rows.                                                             |
+| upsert.keep-deletes     | boolean | false          | When *true* delete operation will leave a tombstone that will have only a primary key and *__deleted** flag set to true                                                                        |
+| dedup                   | boolean | false          | When *true* CDC events will be deduplicated per batch                                                                                                                                          |
+| dedup.column            | String  | __source_ts_ms | Column used to check which state is newer during deduplication                                                                                                                                 |
+| allow-field-addition    | boolean | true           | When *true* sink will be adding new columns to Iceberg tables on schema changes                                                                                                                |
+| table.auto-create       | boolean | false          | When *true* sink will automatically create new Iceberg tables                                                                                                                                  |
+| table.namespace         | String  | default        | Table namespace. In Glue it will be used as database name                                                                                                                                      |
+| table.prefix            | String  | *empty string* | Prefix added to all table names                                                                                                                                                                |
+| table.partition-field   | String  | *null*         | Field name used for partitioning. When a Timestamp or Date field is used, the partitioning is transformed by 'day()', otherwise 'identity()' is used.                                          |
+| iceberg.name            | String  | default        | Iceberg catalog name                                                                                                                                                                           |
+| iceberg.catalog-impl    | String  | *null*         | Iceberg catalog implementation (Only one of iceberg.catalog-impl and iceberg.type can be set to non null value at the same time                                                                |
+| iceberg.type            | String  | *null*         | Iceberg catalog type (Only one of iceberg.catalog-impl and iceberg.type can be set to non null value at the same time)                                                                         |
+| iceberg.*               |         |                | All properties with this prefix will be passed to Iceberg Catalog implementation                                                                                                               |
+| iceberg.table-default.* |         |                | Iceberg specific table settings can be changed with this prefix, e.g. 'iceberg.table-default.write.format.default' can be set to 'orc'                                                         |
 
 
 ### REST / Manual based installation

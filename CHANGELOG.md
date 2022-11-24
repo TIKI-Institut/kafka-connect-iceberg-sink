@@ -2,8 +2,17 @@
 
 ## [Unreleased]
 
--   removed 'table.write-format', can be replaced with 'iceberg.table-default.write.format.default'
--   Reworked partition field implementation. Added config key 'table.partition-field'. Removed dependency on 'upsert' feature
+- removed `table.write-format`, can be replaced with `iceberg.table-default.write.format.default`
+- Reworked partition field implementation. Added config key `table.partition-field`. Removed dependency on upsert feature
+- Upsert Feature:
+  - Removed dependency on debezium cdc fields, only depends on existing primary key
+  - Changed to `deleteKey()`. As in https://github.com/apache/iceberg/pull/4364
+  - Added partitionField Ids to equality delete schema, as mentioned at https://iceberg.apache.org/docs/latest/flink/#upsert
+
+### Default Config changes
+
+- 'upsert.keep-deletes' changed default value to 'false' (previous 'true')
+- introduced new 'dedup' setting with default value 'false'. Previously it was attached to 'upsert' with default value 'true'
 
 ## [0.2.0] - 2022-11-16
 

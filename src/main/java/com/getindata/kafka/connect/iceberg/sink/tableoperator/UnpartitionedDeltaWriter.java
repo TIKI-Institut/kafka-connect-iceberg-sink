@@ -3,33 +3,33 @@ package com.getindata.kafka.connect.iceberg.sink.tableoperator;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.io.FileAppenderFactory;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.OutputFileFactory;
 
 import java.io.IOException;
-import java.util.List;
 
 public class UnpartitionedDeltaWriter extends BaseDeltaTaskWriter {
-    private final RowDataDeltaWriter writer;
+    private final RecordDeltaWriter writer;
 
     public UnpartitionedDeltaWriter(PartitionSpec spec,
-                             FileFormat format,
-                             FileAppenderFactory<Record> appenderFactory,
-                             OutputFileFactory fileFactory,
-                             FileIO io,
-                             long targetFileSize,
-                             Schema schema,
-                             List<Integer> equalityFieldIds,
-                             boolean upsert,
-                             boolean upsertKeepDeletes) {
-        super(spec, format, appenderFactory, fileFactory, io, targetFileSize, schema, equalityFieldIds, upsert, upsertKeepDeletes);
-        this.writer = new RowDataDeltaWriter(null);
+                                    FileFormat format,
+                                    FileAppenderFactory<Record> appenderFactory,
+                                    OutputFileFactory fileFactory,
+                                    FileIO io,
+                                    long targetFileSize,
+                                    Schema schema,
+                                    boolean upsert,
+                                    boolean upsertKeepDeletes,
+                                    String cdcOpField) {
+        super(spec, format, appenderFactory, fileFactory, io, targetFileSize, schema, schema.identifierFieldIds(), upsert, upsertKeepDeletes, cdcOpField);
+        this.writer = new RecordDeltaWriter(null);
     }
 
     @Override
-    RowDataDeltaWriter route(Record row) {
+    RecordDeltaWriter route(Record row) {
         return writer;
     }
 

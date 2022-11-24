@@ -3,7 +3,6 @@ package com.getindata.kafka.connect.iceberg.sink.tableoperator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.getindata.kafka.connect.iceberg.sink.IcebergChangeEvent;
 import com.getindata.kafka.connect.iceberg.sink.IcebergSinkConfiguration;
-import com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
@@ -48,8 +47,7 @@ public class IcebergTableOperator {
      */
     public void addToTable(Table icebergTable, List<IcebergChangeEvent> events) {
 
-        // when operation mode is not upsert deduplicate the events to avoid inserting duplicate row
-        if (configuration.isUpsert() && !icebergTable.schema().identifierFieldIds().isEmpty()) {
+        if (configuration.isDedup() && !icebergTable.schema().identifierFieldIds().isEmpty()) {
             events = deduplicateBatch(events);
         }
 
@@ -110,20 +108,20 @@ public class IcebergTableOperator {
      */
     private int compareByTsThenOp(JsonNode lhs, JsonNode rhs) {
 
-        String upsertDedupColumn = configuration.getUpsertDedupColumn();
+        String upsertDedupColumn = configuration.getDedupColumn();
 
         int result = Long.compare(lhs.get(upsertDedupColumn).asLong(0), rhs.get(upsertDedupColumn).asLong(0));
 
         if (result == 0) {
             // return (x < y) ? -1 : ((x == y) ? 0 : 1);
-            result = getUpsertOperation(lhs).compareByPriority(getUpsertOperation(rhs));
+            result = getCDCOperation(lhs).compareByPriority(getCDCOperation(rhs));
         }
 
         return result;
     }
 
-    private CdcOperation getUpsertOperation(JsonNode lhs) {
-        return CdcOperation.getByCode(lhs.get(configuration.getUpsertOpColumn()).asText("c"));
+    private CdcOperation getCDCOperation(JsonNode lhs) {
+        return CdcOperation.getByCode(lhs.get(configuration.getCdcOpColumn()).asText("c"));
     }
 
     /**

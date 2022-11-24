@@ -15,8 +15,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 
 public class IcebergTableWriterFactory {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC);
@@ -31,11 +29,13 @@ public class IcebergTableWriterFactory {
     public BaseTaskWriter<Record> create(Table icebergTable) {
 
         FileFormat format = IcebergUtil.getTableFileFormat(icebergTable);
-        GenericAppenderFactory appenderFactory = IcebergUtil.getTableAppender(icebergTable);
+        GenericAppenderFactory appenderFactory = IcebergUtil.getTableAppender(icebergTable, configuration.isUpsert());
         int partitionId = Integer.parseInt(FORMATTER.format(Instant.now()));
+        // TODO: partitionId and TaskId, how important are they for parallelization? Can we reuse Kafka Connector Task Instance ID?
         OutputFileFactory fileFactory = OutputFileFactory.builderFor(icebergTable, partitionId, 1L)
                 .defaultSpec(icebergTable.spec()).format(format).build();
-        List<Integer> equalityFieldIds = new ArrayList<>(icebergTable.schema().identifierFieldIds());
+
+        long targetFileSizeBytes = IcebergUtil.getTargetDataFileSize(icebergTable);
 
         BaseTaskWriter<Record> writer;
         if (icebergTable.schema().identifierFieldIds().isEmpty() || !configuration.isUpsert()) {
@@ -44,19 +44,19 @@ public class IcebergTableWriterFactory {
             }
             if (icebergTable.spec().isUnpartitioned()) {
                 writer = new UnpartitionedWriter<>(
-                        icebergTable.spec(), format, appenderFactory, fileFactory, icebergTable.io(), Long.MAX_VALUE);
+                        icebergTable.spec(), format, appenderFactory, fileFactory, icebergTable.io(), targetFileSizeBytes);
             } else {
                 writer = new PartitionedAppendWriter(
-                        icebergTable.spec(), format, appenderFactory, fileFactory, icebergTable.io(), Long.MAX_VALUE, icebergTable.schema());
+                        icebergTable.spec(), format, appenderFactory, fileFactory, icebergTable.io(), targetFileSizeBytes, icebergTable.schema());
             }
         } else if (icebergTable.spec().isUnpartitioned()) {
             writer = new UnpartitionedDeltaWriter(icebergTable.spec(), format, appenderFactory, fileFactory,
                     icebergTable.io(),
-                    Long.MAX_VALUE, icebergTable.schema(), equalityFieldIds, true, configuration.isUpsertKeepDelete());
+                    targetFileSizeBytes, icebergTable.schema(), true, configuration.isUpsertKeepDelete(), configuration.getCdcOpColumn());
         } else {
             writer = new PartitionedDeltaWriter(icebergTable.spec(), format, appenderFactory, fileFactory,
                     icebergTable.io(),
-                    Long.MAX_VALUE, icebergTable.schema(), equalityFieldIds, true, configuration.isUpsertKeepDelete());
+                    targetFileSizeBytes, icebergTable.schema(), true, configuration.isUpsertKeepDelete(), configuration.getCdcOpColumn());
         }
 
         return writer;

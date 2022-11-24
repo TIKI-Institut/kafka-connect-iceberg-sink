@@ -1,5 +1,6 @@
 package com.getindata.kafka.connect.iceberg.sink.tableoperator;
 
+import com.getindata.kafka.connect.iceberg.sink.IcebergUtil;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
@@ -13,42 +14,38 @@ import org.apache.iceberg.util.Tasks;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.List;
 import java.util.Map;
 
 public class PartitionedDeltaWriter extends BaseDeltaTaskWriter {
 
     private final PartitionKey partitionKey;
 
-    private final Map<PartitionKey, RowDataDeltaWriter> writers = Maps.newHashMap();
+    private final Map<PartitionKey, RecordDeltaWriter> writers = Maps.newHashMap();
 
     public PartitionedDeltaWriter(PartitionSpec spec,
-                           FileFormat format,
-                           FileAppenderFactory<Record> appenderFactory,
-                           OutputFileFactory fileFactory,
-                           FileIO io,
-                           long targetFileSize,
-                           Schema schema,
-                           List<Integer> equalityFieldIds,
-                           boolean upsert,
-                           boolean upsertKeepDeletes) {
-        super(spec, format, appenderFactory, fileFactory, io, targetFileSize, schema, equalityFieldIds, upsert, upsertKeepDeletes);
+                                  FileFormat format,
+                                  FileAppenderFactory<Record> appenderFactory,
+                                  OutputFileFactory fileFactory,
+                                  FileIO io,
+                                  long targetFileSize,
+                                  Schema schema,
+                                  boolean upsert,
+                                  boolean upsertKeepDeletes,
+                                  String cdcOpField) {
+        super(spec, format, appenderFactory, fileFactory, io, targetFileSize, schema,
+                IcebergUtil.getEqualityFieldIds(spec, schema, upsert), upsert, upsertKeepDeletes, cdcOpField);
         this.partitionKey = new PartitionKey(spec, schema);
     }
 
     @Override
-    RowDataDeltaWriter route(Record row) {
+    RecordDeltaWriter route(Record row) {
         partitionKey.partition(wrapper().wrap(row));
 
-        RowDataDeltaWriter writer = writers.get(partitionKey);
-        if (writer == null) {
+        return writers.computeIfAbsent(partitionKey, (key) -> {
             // NOTICE: we need to copy a new partition key here, in case of messing up the keys in writers.
-            PartitionKey copiedKey = partitionKey.copy();
-            writer = new RowDataDeltaWriter(copiedKey);
-            writers.put(copiedKey, writer);
-        }
-
-        return writer;
+            PartitionKey copiedKey = key.copy();
+            return new RecordDeltaWriter(copiedKey);
+        });
     }
 
     @Override
@@ -57,7 +54,7 @@ public class PartitionedDeltaWriter extends BaseDeltaTaskWriter {
             Tasks.foreach(writers.values())
                     .throwFailureWhenFinished()
                     .noRetry()
-                    .run(RowDataDeltaWriter::close, IOException.class);
+                    .run(RecordDeltaWriter::close, IOException.class);
 
             writers.clear();
         } catch (IOException e) {

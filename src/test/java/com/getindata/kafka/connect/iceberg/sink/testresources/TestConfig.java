@@ -38,7 +38,7 @@ public class TestConfig {
 
         public Builder withLocalCatalog(Path localWarehouseDir) {
             properties.put(IcebergSinkConfiguration.CATALOG_TYPE, "hadoop");
-            properties.put("iceberg.warehouse", localWarehouseDir.toUri().toString());
+            properties.put("iceberg.warehouse", localWarehouseDir.toUri().resolve("warehouse").toString());
             return this;
         }
 
