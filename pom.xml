@@ -175,10 +175,6 @@
                     <artifactId>hive-shims</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.apache.hive</groupId>
-                    <artifactId>hive-standalone-metastore</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>org.eclipse.jetty</groupId>
                     <artifactId>jetty-servlet</artifactId>
                 </exclusion>
